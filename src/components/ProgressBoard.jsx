@@ -294,7 +294,7 @@ function ProgressBoard({ employees, templates, progress, onUpdateProgress }) {
                 <div className="form-group">
                   <label>任务状态</label>
                   <div className="status-options">
-                    {Object.entries(TASK_STATUS).map(([key, value]) => (
+                    {Object.entries(TASK_STATUS).map(([, value]) => (
                       <label
                         key={value}
                         className={`status-option ${editForm.status === value ? 'selected' : ''} ${getStatusBadge(value)}`}
