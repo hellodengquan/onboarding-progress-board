@@ -12,7 +12,54 @@ export const TASK_STATUS_LABEL = {
   [TASK_STATUS.BLOCKED]: '受阻'
 };
 
-export const initialTaskTemplates = [
+export const TEMPLATE_VALID_CATEGORIES = ['行政', 'IT', 'HR', '部门'];
+
+export const validateTemplate = (template) => {
+  const errors = [];
+  if (!template || typeof template !== 'object') {
+    return ['模板项必须是对象'];
+  }
+  if (!template.name || typeof template.name !== 'string' || !template.name.trim()) {
+    errors.push('任务名称不能为空');
+  }
+  if (template.description !== undefined && typeof template.description !== 'string') {
+    errors.push('任务描述必须是字符串');
+  }
+  if (template.category && !TEMPLATE_VALID_CATEGORIES.includes(template.category)) {
+    errors.push(`分类必须是以下值之一：${TEMPLATE_VALID_CATEGORIES.join('、')}`);
+  }
+  if (template.sortOrder !== undefined && !Number.isInteger(template.sortOrder)) {
+    errors.push('排序必须是整数');
+  }
+  if (template.estimatedDays !== undefined && (!Number.isInteger(template.estimatedDays) || template.estimatedDays < 1)) {
+    errors.push('预计天数必须是大于 0 的整数');
+  }
+  return errors;
+};
+
+export const validateTemplates = (templates) => {
+  if (!Array.isArray(templates)) {
+    return { valid: false, errors: ['模板数据必须是数组格式'] };
+  }
+  if (templates.length === 0) {
+    return { valid: false, errors: ['模板数组不能为空，至少需要一个任务'] };
+  }
+  const allErrors = [];
+  templates.forEach((tpl, index) => {
+    const errors = validateTemplate(tpl);
+    if (errors.length > 0) {
+      errors.forEach((err) => allErrors.push(`第 ${index + 1} 项：${err}`));
+    }
+  });
+  const ids = templates.map((t) => t.id).filter(Boolean);
+  const uniqueIds = new Set(ids);
+  if (ids.length !== uniqueIds.size) {
+    allErrors.push('模板中存在重复的 id');
+  }
+  return { valid: allErrors.length === 0, errors: allErrors };
+};
+
+const FALLBACK_TEMPLATES = [
   {
     id: 't1',
     name: '文档签署',
@@ -78,6 +125,36 @@ export const initialTaskTemplates = [
     estimatedDays: 5
   }
 ];
+
+export const loadDefaultTemplates = async () => {
+  try {
+    const response = await fetch('/default-templates.json', { cache: 'no-cache' });
+    if (!response.ok) {
+      console.warn('[Templates] 默认模板文件加载失败，使用内置回退模板');
+      return FALLBACK_TEMPLATES;
+    }
+    const data = await response.json();
+    const validation = validateTemplates(data);
+    if (!validation.valid) {
+      console.warn('[Templates] 默认模板验证失败:', validation.errors);
+      return FALLBACK_TEMPLATES;
+    }
+    const normalized = data.map((tpl, index) => ({
+      id: tpl.id || `tpl_${Date.now()}_${index}`,
+      name: tpl.name,
+      description: tpl.description || '',
+      category: tpl.category || '行政',
+      sortOrder: tpl.sortOrder ?? index + 1,
+      estimatedDays: tpl.estimatedDays ?? 1
+    }));
+    return normalized;
+  } catch (error) {
+    console.warn('[Templates] 加载默认模板异常，使用内置回退模板:', error);
+    return FALLBACK_TEMPLATES;
+  }
+};
+
+export const initialTaskTemplates = FALLBACK_TEMPLATES;
 
 export const initialEmployees = [
   {

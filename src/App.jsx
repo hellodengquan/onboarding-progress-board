@@ -1,95 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import TaskTemplateManager from './components/TaskTemplateManager';
 import ProgressBoard from './components/ProgressBoard';
+import TemplateUploader from './components/TemplateUploader';
+import SettingsPanel from './components/SettingsPanel';
+import { StorageFactory, STORAGE_BACKEND, STORAGE_LABEL } from './storage';
 import {
-  initialTaskTemplates,
   initialEmployees,
   initialProgress,
+  initialTaskTemplates,
+  loadDefaultTemplates,
   TASK_STATUS
 } from './data/mockData';
 import './App.css';
 
-const STORAGE_KEYS = {
-  TEMPLATES: 'onboarding_templates',
-  PROGRESS: 'onboarding_progress',
-  ACTIVE_TAB: 'onboarding_active_tab'
-};
-
-
-
-const getStorageErrorInfo = (error) => {
-  if (error.name === 'QuotaExceededError' || error.code === 22) {
-    return {
-      type: 'quota',
-      message: '浏览器存储空间已满，无法保存您的修改。请清理浏览器缓存或使用「重置数据」功能减少数据量后再试。'
-    };
-  }
-  if (error.name === 'SecurityError' || error.name === 'NotAllowedError') {
-    return {
-      type: 'disabled',
-      message: '浏览器已禁用本地存储功能，数据无法保存。请在浏览器设置中启用 Cookie 和网站数据权限后刷新页面。'
-    };
-  }
-  return {
-    type: 'unknown',
-    message: `保存数据时发生错误：${error.message || '未知错误'}。请尝试刷新页面后重新操作。`
-  };
-};
-
-const loadFromStorage = (key, defaultValue, onCorrupted) => {
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored === null) {
-      return { value: defaultValue, fromStorage: false };
-    }
-    try {
-      const parsed = JSON.parse(stored);
-      return { value: parsed, fromStorage: true };
-    } catch (parseError) {
-      console.warn(`[Storage] ${key} 数据损坏，已自动清理并恢复默认值:`, parseError);
-      localStorage.removeItem(key);
-      if (onCorrupted) {
-        onCorrupted(key, parseError);
-      }
-      return { value: defaultValue, fromStorage: false, corrupted: true };
-    }
-  } catch (readError) {
-    console.error(`[Storage] 读取 ${key} 失败:`, readError);
-    return { value: defaultValue, fromStorage: false, error: readError };
-  }
-};
-
-const saveToStorage = (key, value, onError) => {
-  try {
-    const serialized = JSON.stringify(value);
-    localStorage.setItem(key, serialized);
-    return { success: true };
-  } catch (error) {
-    console.error(`[Storage] 保存 ${key} 失败:`, error);
-    const errorInfo = getStorageErrorInfo(error);
-    if (onError) {
-      onError(key, errorInfo);
-    }
-    return { success: false, error: errorInfo };
-  }
-};
-
-const clearStorage = () => {
-  Object.values(STORAGE_KEYS).forEach((key) => {
-    localStorage.removeItem(key);
-  });
-};
-
-const STORAGE_LABELS = {
-  [STORAGE_KEYS.TEMPLATES]: '任务模板',
-  [STORAGE_KEYS.PROGRESS]: '员工进度',
-  [STORAGE_KEYS.ACTIVE_TAB]: '页面状态'
-};
-
 function App() {
+  const storageFactoryRef = useRef(null);
   const [notification, setNotification] = useState(null);
   const [corruptedAlert, setCorruptedAlert] = useState(null);
   const [syncNotification, setSyncNotification] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const isLocalChange = useRef({
     templates: false,
@@ -97,24 +28,12 @@ function App() {
     tab: false
   });
 
-  const handleCorrupted = useCallback((key) => {
-    setCorruptedAlert({
-      key,
-      label: STORAGE_LABELS[key] || key,
-      message: `检测到「${STORAGE_LABELS[key] || key}」数据已损坏，已自动恢复为默认值。`
-    });
-  }, []);
-
-  const handleSaveError = useCallback((key, errorInfo) => {
-    setNotification({
-      id: Date.now(),
-      type: 'error',
-      title: '数据保存失败',
-      message: errorInfo.message,
-      detail: `失败数据：${STORAGE_LABELS[key] || key}`,
-      persistent: errorInfo.type === 'quota' || errorInfo.type === 'disabled'
-    });
-  }, []);
+  const [activeTab, setActiveTab] = useState('board');
+  const [taskTemplates, setTaskTemplates] = useState(initialTaskTemplates);
+  const [employees] = useState(initialEmployees);
+  const [progress, setProgress] = useState(initialProgress);
+  const [currentBackend, setCurrentBackend] = useState(STORAGE_BACKEND.LOCAL);
+  const [apiConfig, setApiConfig] = useState({ baseUrl: '/api', timeout: 10000 });
 
   const dismissNotification = useCallback((id) => {
     setNotification((prev) => (prev?.id === id ? null : prev));
@@ -128,80 +47,130 @@ function App() {
     setSyncNotification(null);
   }, []);
 
-  const [activeTab, setActiveTab] = useState(() => {
-    const result = loadFromStorage(STORAGE_KEYS.ACTIVE_TAB, 'board', handleCorrupted);
-    return result.value;
-  });
+  const handleSaveError = useCallback((key, errorInfo) => {
+    setNotification({
+      id: Date.now(),
+      type: 'error',
+      title: '数据保存失败',
+      message: errorInfo.message,
+      detail: errorInfo.dataLabel ? `失败数据：${errorInfo.dataLabel}` : null,
+      persistent: errorInfo.type === 'quota' || errorInfo.type === 'disabled' ||
+                  errorInfo.type === 'network' || errorInfo.type === 'timeout'
+    });
+  }, []);
 
-  const [taskTemplates, setTaskTemplates] = useState(() => {
-    const result = loadFromStorage(STORAGE_KEYS.TEMPLATES, initialTaskTemplates, handleCorrupted);
-    return result.value;
-  });
-
-  const [employees] = useState(initialEmployees);
-
-  const [progress, setProgress] = useState(() => {
-    const result = loadFromStorage(STORAGE_KEYS.PROGRESS, initialProgress, handleCorrupted);
-    return result.value;
-  });
-
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-
-  useEffect(() => {
-    if (!isLocalChange.current.templates) return;
-    isLocalChange.current.templates = false;
-    saveToStorage(STORAGE_KEYS.TEMPLATES, taskTemplates, handleSaveError);
-  }, [taskTemplates, handleSaveError]);
+  const handleCorrupted = useCallback((key, label) => {
+    setCorruptedAlert({
+      key,
+      label,
+      message: `检测到「${label}」数据已损坏，已自动恢复为默认值。`
+    });
+  }, []);
 
   useEffect(() => {
-    if (!isLocalChange.current.progress) return;
-    isLocalChange.current.progress = false;
-    saveToStorage(STORAGE_KEYS.PROGRESS, progress, handleSaveError);
-  }, [progress, handleSaveError]);
+    const factory = new StorageFactory(handleSaveError, handleCorrupted);
+    storageFactoryRef.current = factory;
+    const initialBackend = factory.getBackend();
+    const initialApiConfig = factory.getApiConfig();
 
-  useEffect(() => {
-    if (!isLocalChange.current.tab) return;
-    isLocalChange.current.tab = false;
-    saveToStorage(STORAGE_KEYS.ACTIVE_TAB, activeTab, handleSaveError);
-  }, [activeTab, handleSaveError]);
-
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (!Object.values(STORAGE_KEYS).includes(e.key)) return;
-      if (e.storageArea !== localStorage) return;
-
+    const initData = async () => {
       try {
-        if (e.key === STORAGE_KEYS.TEMPLATES) {
-          const newValue = e.newValue ? JSON.parse(e.newValue) : initialTaskTemplates;
-          isLocalChange.current.templates = false;
-          setTaskTemplates(newValue);
-          setSyncNotification({
-            id: Date.now(),
-            message: '任务模板已在其他标签页更新，当前页面已自动同步'
+        setCurrentBackend(initialBackend);
+        setApiConfig(initialApiConfig);
+        const repo = factory.getRepository();
+
+        const tabResult = await repo.load('onboarding_active_tab', 'board');
+        if (!tabResult.error) {
+          setActiveTab(tabResult.value);
+        }
+
+        const templatesResult = await repo.load('onboarding_templates', null);
+        if (templatesResult.fromStorage && templatesResult.value) {
+          setTaskTemplates(templatesResult.value);
+        } else if (!templatesResult.fromStorage) {
+          const defaultTemplates = await loadDefaultTemplates();
+          setTaskTemplates(defaultTemplates);
+          isLocalChange.current.templates = true;
+        } else {
+          setTaskTemplates(templatesResult.value);
+        }
+
+        const progressResult = await repo.load('onboarding_progress', initialProgress);
+        setProgress(progressResult.value);
+
+        if (repo.subscribe) {
+          repo.subscribe((key, newValue) => {
+            try {
+              if (key === 'onboarding_templates') {
+                const parsed = newValue ? JSON.parse(newValue) : initialTaskTemplates;
+                isLocalChange.current.templates = false;
+                setTaskTemplates(parsed);
+                setSyncNotification({
+                  id: Date.now(),
+                  message: '任务模板已在其他标签页更新，当前页面已自动同步'
+                });
+              } else if (key === 'onboarding_progress') {
+                const parsed = newValue ? JSON.parse(newValue) : initialProgress;
+                isLocalChange.current.progress = false;
+                setProgress(parsed);
+                setSyncNotification({
+                  id: Date.now(),
+                  message: '员工进度已在其他标签页更新，当前页面已自动同步'
+                });
+              } else if (key === 'onboarding_active_tab') {
+                isLocalChange.current.tab = false;
+                setActiveTab(newValue || 'board');
+              }
+            } catch (e) {
+              console.error('[Sync] 同步解析失败:', e);
+            }
           });
-        } else if (e.key === STORAGE_KEYS.PROGRESS) {
-          const newValue = e.newValue ? JSON.parse(e.newValue) : initialProgress;
-          isLocalChange.current.progress = false;
-          setProgress(newValue);
-          setSyncNotification({
-            id: Date.now(),
-            message: '员工进度已在其他标签页更新，当前页面已自动同步'
-          });
-        } else if (e.key === STORAGE_KEYS.ACTIVE_TAB) {
-          const newValue = e.newValue || 'board';
-          isLocalChange.current.tab = false;
-          setActiveTab(newValue);
         }
       } catch (error) {
-        console.error('[Sync] 解析同步数据失败:', error);
+        console.error('[Init] 初始化数据失败:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    initData();
+
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      if (storageFactoryRef.current) {
+        storageFactoryRef.current.destroy();
+      }
     };
-  }, []);
+  }, [handleSaveError, handleCorrupted]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isLocalChange.current.templates) return;
+    isLocalChange.current.templates = false;
+    const repo = storageFactoryRef.current?.getRepository();
+    if (repo) {
+      repo.save('onboarding_templates', taskTemplates);
+    }
+  }, [taskTemplates, isLoading]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isLocalChange.current.progress) return;
+    isLocalChange.current.progress = false;
+    const repo = storageFactoryRef.current?.getRepository();
+    if (repo) {
+      repo.save('onboarding_progress', progress);
+    }
+  }, [progress, isLoading]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isLocalChange.current.tab) return;
+    isLocalChange.current.tab = false;
+    const repo = storageFactoryRef.current?.getRepository();
+    if (repo) {
+      repo.save('onboarding_active_tab', activeTab);
+    }
+  }, [activeTab, isLoading]);
 
   const handleTabChange = useCallback((tab) => {
     isLocalChange.current.tab = true;
@@ -235,6 +204,18 @@ function App() {
     }
   }, []);
 
+  const handleUploadTemplates = useCallback((newTemplates) => {
+    isLocalChange.current.templates = true;
+    setTaskTemplates(newTemplates);
+    setNotification({
+      id: Date.now(),
+      type: 'info',
+      title: '模板导入成功',
+      message: `已成功导入 ${newTemplates.length} 个任务模板`,
+      persistent: false
+    });
+  }, []);
+
   const handleUpdateProgress = useCallback((employeeId, taskId, progressData) => {
     isLocalChange.current.progress = true;
     setProgress((prev) => ({
@@ -246,12 +227,67 @@ function App() {
     }));
   }, []);
 
-  const handleClearData = useCallback(() => {
+  const handleSwitchBackend = useCallback(async (backend, newApiConfig) => {
+    const factory = storageFactoryRef.current;
+    if (!factory) return;
+
+    try {
+      const oldRepo = factory.getRepository();
+      const [templatesSnapshot, progressSnapshot, tabSnapshot] = await Promise.all([
+        oldRepo.load('onboarding_templates', taskTemplates),
+        oldRepo.load('onboarding_progress', progress),
+        oldRepo.load('onboarding_active_tab', activeTab)
+      ]);
+
+      await factory.switchBackend(backend, newApiConfig);
+      setCurrentBackend(backend);
+      if (newApiConfig) {
+        setApiConfig(factory.getApiConfig());
+      }
+
+      const newRepo = factory.getRepository();
+      isLocalChange.current.templates = true;
+      isLocalChange.current.progress = true;
+      isLocalChange.current.tab = true;
+
+      await Promise.all([
+        newRepo.save('onboarding_templates', templatesSnapshot.value),
+        newRepo.save('onboarding_progress', progressSnapshot.value),
+        newRepo.save('onboarding_active_tab', tabSnapshot.value)
+      ]);
+
+      setNotification({
+        id: Date.now(),
+        type: 'info',
+        title: '存储切换成功',
+        message: `已切换到${STORAGE_LABEL[backend]}，数据已自动同步`,
+        persistent: false
+      });
+    } catch (error) {
+      console.error('[SwitchBackend] 切换存储后端失败:', error);
+      setNotification({
+        id: Date.now(),
+        type: 'error',
+        title: '存储切换失败',
+        message: error.message || '切换存储后端时发生错误，请稍后重试',
+        persistent: false
+      });
+    }
+  }, [taskTemplates, progress, activeTab]);
+
+  const handleClearData = useCallback(async () => {
+    const factory = storageFactoryRef.current;
     isLocalChange.current.templates = true;
     isLocalChange.current.progress = true;
     isLocalChange.current.tab = true;
-    clearStorage();
-    setTaskTemplates(initialTaskTemplates);
+
+    if (factory) {
+      const repo = factory.getRepository();
+      await repo.clearAll();
+    }
+
+    const defaultTemplates = await loadDefaultTemplates();
+    setTaskTemplates(defaultTemplates);
     setProgress(initialProgress);
     setActiveTab('board');
     setShowClearConfirm(false);
@@ -274,12 +310,21 @@ function App() {
     JSON.stringify(taskTemplates) !== JSON.stringify(initialTaskTemplates) ||
     JSON.stringify(progress) !== JSON.stringify(initialProgress);
 
+  if (isLoading) {
+    return (
+      <div className="app-loading">
+        <div className="loading-spinner" />
+        <div className="loading-text">正在加载数据...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       {notification && (
         <div className={`notification notification-${notification.type}`}>
           <div className="notification-icon">
-            {notification.type === 'error' ? '⚠️' : 'ℹ️'}
+            {notification.type === 'error' ? '⚠️' : notification.type === 'info' ? 'ℹ️' : '✅'}
           </div>
           <div className="notification-content">
             <div className="notification-title">{notification.title}</div>
@@ -355,6 +400,10 @@ function App() {
             </div>
           </div>
           <div className="header-actions">
+            <div className="storage-indicator" title={`当前存储方式：${STORAGE_LABEL[currentBackend]}`}>
+              <span className="storage-icon">{currentBackend === STORAGE_BACKEND.LOCAL ? '💻' : '☁️'}</span>
+              <span className="storage-label">{STORAGE_LABEL[currentBackend]}</span>
+            </div>
             <nav className="nav-tabs">
               <button
                 className={`nav-tab ${activeTab === 'board' ? 'active' : ''}`}
@@ -375,12 +424,18 @@ function App() {
               </button>
             </nav>
             <button
+              className="btn btn-sm btn-default"
+              onClick={() => setShowSettings(true)}
+              title="系统设置"
+            >
+              ⚙️ 设置
+            </button>
+            <button
               className={`btn btn-sm ${hasCustomData ? 'btn-danger-outline' : 'btn-default'}`}
               onClick={() => setShowClearConfirm(true)}
               title="重置所有数据到初始状态"
             >
-              <span>🔄</span>
-              重置数据
+              🔄 重置数据
             </button>
           </div>
         </div>
@@ -396,18 +451,35 @@ function App() {
           />
         )}
         {activeTab === 'templates' && (
-          <TaskTemplateManager
-            templates={taskTemplates}
-            onAddTemplate={handleAddTemplate}
-            onUpdateTemplate={handleUpdateTemplate}
-            onDeleteTemplate={handleDeleteTemplate}
-          />
+          <div>
+            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <TemplateUploader
+                onUpload={handleUploadTemplates}
+                currentTemplates={taskTemplates}
+              />
+            </div>
+            <TaskTemplateManager
+              templates={taskTemplates}
+              onAddTemplate={handleAddTemplate}
+              onUpdateTemplate={handleUpdateTemplate}
+              onDeleteTemplate={handleDeleteTemplate}
+            />
+          </div>
         )}
       </main>
 
       <footer className="app-footer">
         <p>© 2026 HR 入职管理系统 · 为新员工提供更好的入职体验</p>
       </footer>
+
+      {showSettings && (
+        <SettingsPanel
+          currentBackend={currentBackend}
+          apiConfig={apiConfig}
+          onSwitchBackend={handleSwitchBackend}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {showClearConfirm && (
         <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>

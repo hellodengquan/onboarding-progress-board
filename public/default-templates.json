@@ -1,0 +1,66 @@
+[
+  {
+    "id": "t1",
+    "name": "文档签署",
+    "description": "完成劳动合同、保密协议等文件签署",
+    "category": "行政",
+    "sortOrder": 1,
+    "estimatedDays": 1
+  },
+  {
+    "id": "t2",
+    "name": "账号开通",
+    "description": "开通邮箱、OA、Git 等系统账号",
+    "category": "IT",
+    "sortOrder": 2,
+    "estimatedDays": 1
+  },
+  {
+    "id": "t3",
+    "name": "设备领取",
+    "description": "领取笔记本电脑、工牌、办公用品",
+    "category": "行政",
+    "sortOrder": 3,
+    "estimatedDays": 1
+  },
+  {
+    "id": "t4",
+    "name": "入职培训",
+    "description": "公司文化、规章制度、安全培训",
+    "category": "HR",
+    "sortOrder": 4,
+    "estimatedDays": 2
+  },
+  {
+    "id": "t5",
+    "name": "部门介绍",
+    "description": "认识团队成员、了解部门架构",
+    "category": "部门",
+    "sortOrder": 5,
+    "estimatedDays": 1
+  },
+  {
+    "id": "t6",
+    "name": "导师对接",
+    "description": "确认入职导师、制定第一周计划",
+    "category": "部门",
+    "sortOrder": 6,
+    "estimatedDays": 1
+  },
+  {
+    "id": "t7",
+    "name": "开发环境搭建",
+    "description": "安装开发工具、配置开发环境",
+    "category": "IT",
+    "sortOrder": 7,
+    "estimatedDays": 2
+  },
+  {
+    "id": "t8",
+    "name": "项目上手",
+    "description": "阅读项目文档、参与第一个任务",
+    "category": "部门",
+    "sortOrder": 8,
+    "estimatedDays": 5
+  }
+]
