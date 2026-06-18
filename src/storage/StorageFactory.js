@@ -40,9 +40,10 @@ const readApiConfigFromStorage = () => {
 };
 
 export class StorageFactory {
-  constructor(onSaveError, onCorrupted) {
+  constructor(onSaveError, onCorrupted, onConflict) {
     this.onSaveError = onSaveError || (() => {});
     this.onCorrupted = onCorrupted || (() => {});
+    this.onConflict = onConflict || (() => {});
     this.currentBackend = readBackendTypeFromStorage();
     this.apiConfig = readApiConfigFromStorage();
     this.repository = this._createRepository();
@@ -50,7 +51,7 @@ export class StorageFactory {
 
   _createRepository() {
     if (this.currentBackend === STORAGE_BACKEND.RESTFUL) {
-      return new RestfulRepository(this.apiConfig, this.onSaveError);
+      return new RestfulRepository(this.apiConfig, this.onSaveError, this.onConflict);
     }
     return new LocalStorageRepository(this.onSaveError, this.onCorrupted);
   }

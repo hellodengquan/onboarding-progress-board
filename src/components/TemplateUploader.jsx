@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { validateTemplates } from '../data/mockData';
+import { validateTemplatesBySchema, formatValidationErrors } from '../utils/validation.js';
 
 function TemplateUploader({ onUpload, currentTemplates }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -28,8 +29,17 @@ function TemplateUploader({ onUpload, currentTemplates }) {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
-        const validation = validateTemplates(data);
 
+        const schemaValidation = validateTemplatesBySchema(data);
+        if (!schemaValidation.valid) {
+          setErrors([
+            'JSON 格式校验失败，请检查文件结构：',
+            ...formatValidationErrors(schemaValidation.errors)
+          ]);
+          return;
+        }
+
+        const validation = validateTemplates(data);
         if (!validation.valid) {
           setErrors(validation.errors);
           return;

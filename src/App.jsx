@@ -3,7 +3,10 @@ import TaskTemplateManager from './components/TaskTemplateManager';
 import ProgressBoard from './components/ProgressBoard';
 import TemplateUploader from './components/TemplateUploader';
 import SettingsPanel from './components/SettingsPanel';
+import ConflictResolutionDialog from './components/ConflictResolutionDialog';
+import VersionHistoryPanel from './components/VersionHistoryPanel';
 import { StorageFactory, STORAGE_BACKEND, STORAGE_LABEL } from './storage';
+import { saveSnapshot, clearHistory } from './utils/versionHistory.js';
 import {
   initialEmployees,
   initialProgress,
@@ -15,11 +18,16 @@ import './App.css';
 
 function App() {
   const storageFactoryRef = useRef(null);
+  const pendingConflictRef = useRef(null);
+  const saveInProgressRef = useRef({ templates: false, progress: false });
+
   const [notification, setNotification] = useState(null);
   const [corruptedAlert, setCorruptedAlert] = useState(null);
   const [syncNotification, setSyncNotification] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isLocalChange = useRef({
@@ -67,8 +75,81 @@ function App() {
     });
   }, []);
 
+  const handleConflict = useCallback(async (key, result) => {
+    if (result.conflict && result.conflictInfo && result.resolve) {
+      pendingConflictRef.current = { ...result.conflictInfo, resolve: result.resolve };
+      setConflictInfo(result.conflictInfo);
+    }
+  }, []);
+
+  const handleConflictResolve = useCallback(async (resolution, mergedData) => {
+    const pending = pendingConflictRef.current;
+    if (!pending || !pending.resolve) {
+      setConflictInfo(null);
+      return;
+    }
+
+    try {
+      if (resolution === 'accept_server' && pending.serverData) {
+        const key = pending.key;
+        if (key === 'onboarding_templates') {
+          isLocalChange.current.templates = false;
+          setTaskTemplates(pending.serverData);
+        } else if (key === 'onboarding_progress') {
+          isLocalChange.current.progress = false;
+          setProgress(pending.serverData);
+        }
+        setNotification({
+          id: Date.now(),
+          type: 'info',
+          title: '已接受服务器版本',
+          message: '已放弃您的修改，数据已更新为服务器最新版本',
+          persistent: false
+        });
+      } else {
+        const result = await pending.resolve(resolution, mergedData);
+        if (result.success) {
+          setNotification({
+            id: Date.now(),
+            type: 'info',
+            title: resolution === 'merge' ? '合并成功' : '保存成功',
+            message: resolution === 'merge'
+              ? '已智能合并两个版本的内容'
+              : '已用您的版本覆盖服务器数据',
+            persistent: false
+          });
+        } else if (!result.cancelled) {
+          setNotification({
+            id: Date.now(),
+            type: 'error',
+            title: '保存失败',
+            message: result.error?.message || '处理冲突时发生错误',
+            persistent: false
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[Conflict] 处理冲突失败:', error);
+      setNotification({
+        id: Date.now(),
+        type: 'error',
+        title: '处理冲突失败',
+        message: error.message || '请尝试刷新页面后重新操作',
+        persistent: false
+      });
+    } finally {
+      pendingConflictRef.current = null;
+      setConflictInfo(null);
+    }
+  }, []);
+
+  const handleConflictCancel = useCallback(() => {
+    pendingConflictRef.current = null;
+    setConflictInfo(null);
+  }, []);
+
   useEffect(() => {
-    const factory = new StorageFactory(handleSaveError, handleCorrupted);
+    const factory = new StorageFactory(handleSaveError, handleCorrupted, handleConflict);
     storageFactoryRef.current = factory;
     const initialBackend = factory.getBackend();
     const initialApiConfig = factory.getApiConfig();
@@ -140,27 +221,54 @@ function App() {
         storageFactoryRef.current.destroy();
       }
     };
-  }, [handleSaveError, handleCorrupted]);
+  }, [handleSaveError, handleCorrupted, handleConflict]);
+
+  const saveWithSnapshot = useCallback(async (key, value, description) => {
+    const repo = storageFactoryRef.current?.getRepository();
+    if (!repo) return { success: false };
+
+    const result = await repo.save(key, value);
+
+    if (result.success) {
+      if (key === 'onboarding_templates' || key === 'onboarding_progress') {
+        const templates = key === 'onboarding_templates' ? value : taskTemplates;
+        const progressData = key === 'onboarding_progress' ? value : progress;
+        saveSnapshot(templates, progressData, description);
+      }
+    } else if (result.conflict) {
+      handleConflict(key, result);
+    }
+
+    return result;
+  }, [taskTemplates, progress, handleConflict]);
 
   useEffect(() => {
     if (isLoading) return;
     if (!isLocalChange.current.templates) return;
+    if (saveInProgressRef.current.templates) return;
+
+    saveInProgressRef.current.templates = true;
     isLocalChange.current.templates = false;
-    const repo = storageFactoryRef.current?.getRepository();
-    if (repo) {
-      repo.save('onboarding_templates', taskTemplates);
-    }
-  }, [taskTemplates, isLoading]);
+
+    saveWithSnapshot('onboarding_templates', taskTemplates, '修改了任务模板')
+      .finally(() => {
+        saveInProgressRef.current.templates = false;
+      });
+  }, [taskTemplates, isLoading, saveWithSnapshot]);
 
   useEffect(() => {
     if (isLoading) return;
     if (!isLocalChange.current.progress) return;
+    if (saveInProgressRef.current.progress) return;
+
+    saveInProgressRef.current.progress = true;
     isLocalChange.current.progress = false;
-    const repo = storageFactoryRef.current?.getRepository();
-    if (repo) {
-      repo.save('onboarding_progress', progress);
-    }
-  }, [progress, isLoading]);
+
+    saveWithSnapshot('onboarding_progress', progress, '更新了员工进度')
+      .finally(() => {
+        saveInProgressRef.current.progress = false;
+      });
+  }, [progress, isLoading, saveWithSnapshot]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -227,6 +335,21 @@ function App() {
     }));
   }, []);
 
+  const handleRestoreFromSnapshot = useCallback((templates, prog, description) => {
+    isLocalChange.current.templates = true;
+    isLocalChange.current.progress = true;
+    setTaskTemplates(templates);
+    setProgress(prog);
+    saveSnapshot(templates, prog, `回滚到：${description}`);
+    setNotification({
+      id: Date.now(),
+      type: 'info',
+      title: '回滚成功',
+      message: `已恢复到历史版本：${description}`,
+      persistent: false
+    });
+  }, []);
+
   const handleSwitchBackend = useCallback(async (backend, newApiConfig) => {
     const factory = storageFactoryRef.current;
     if (!factory) return;
@@ -285,6 +408,8 @@ function App() {
       const repo = factory.getRepository();
       await repo.clearAll();
     }
+
+    clearHistory();
 
     const defaultTemplates = await loadDefaultTemplates();
     setTaskTemplates(defaultTemplates);
@@ -425,6 +550,13 @@ function App() {
             </nav>
             <button
               className="btn btn-sm btn-default"
+              onClick={() => setShowVersionHistory(true)}
+              title="查看版本历史"
+            >
+              📜 历史版本
+            </button>
+            <button
+              className="btn btn-sm btn-default"
               onClick={() => setShowSettings(true)}
               title="系统设置"
             >
@@ -452,7 +584,7 @@ function App() {
         )}
         {activeTab === 'templates' && (
           <div>
-            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <TemplateUploader
                 onUpload={handleUploadTemplates}
                 currentTemplates={taskTemplates}
@@ -481,6 +613,23 @@ function App() {
         />
       )}
 
+      {showVersionHistory && (
+        <VersionHistoryPanel
+          currentTemplates={taskTemplates}
+          currentProgress={progress}
+          onRestore={handleRestoreFromSnapshot}
+          onClose={() => setShowVersionHistory(false)}
+        />
+      )}
+
+      {conflictInfo && (
+        <ConflictResolutionDialog
+          conflictInfo={conflictInfo}
+          onResolve={handleConflictResolve}
+          onClose={handleConflictCancel}
+        />
+      )}
+
       {showClearConfirm && (
         <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -496,7 +645,7 @@ function App() {
                 <div>
                   <p className="confirm-title">确定要重置所有数据吗？</p>
                   <p className="confirm-desc">
-                    此操作将清空所有自定义的任务模板和员工进度数据，恢复到系统初始状态。此操作不可撤销。
+                    此操作将清空所有自定义的任务模板、员工进度数据和版本历史，恢复到系统初始状态。此操作不可撤销。
                   </p>
                 </div>
               </div>

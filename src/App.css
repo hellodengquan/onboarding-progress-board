@@ -1256,6 +1256,398 @@
   cursor: not-allowed;
 }
 
+.conflict-warning {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: var(--warning-light);
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.conflict-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.conflict-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.conflict-subtitle {
+  font-size: 14px;
+  color: var(--gray-600);
+}
+
+.conflict-versions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.version-card {
+  flex: 1;
+  padding: 14px 16px;
+  background: var(--gray-50);
+  border: 2px solid var(--gray-200);
+  border-radius: 10px;
+}
+
+.version-card .version-label.local {
+  color: var(--primary-color);
+}
+
+.version-card .version-label.server {
+  color: var(--success-color);
+}
+
+.version-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.version-time {
+  font-size: 12px;
+  color: var(--gray-600);
+  margin-bottom: 4px;
+}
+
+.version-hash {
+  font-size: 11px;
+  color: var(--gray-500);
+  font-family: monospace;
+}
+
+.version-conflict-icon {
+  font-size: 28px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.conflict-diff {
+  margin-bottom: 20px;
+}
+
+.diff-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 10px;
+}
+
+.diff-list {
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.diff-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.diff-item:last-child {
+  border-bottom: none;
+}
+
+.diff-item.diff-added {
+  background: var(--success-light);
+  border-left: 3px solid var(--success-color);
+}
+
+.diff-item.diff-deleted {
+  background: var(--danger-light);
+  border-left: 3px solid var(--danger-color);
+}
+
+.diff-item.diff-modified {
+  background: var(--warning-light);
+  border-left: 3px solid var(--warning-color);
+}
+
+.diff-type {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.diff-added {
+  color: var(--success-color);
+}
+
+.diff-deleted {
+  color: var(--danger-color);
+}
+
+.diff-modified {
+  color: var(--warning-color);
+}
+
+.diff-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+  margin-bottom: 4px;
+}
+
+.diff-fields {
+  margin-top: 6px;
+  padding-left: 16px;
+}
+
+.diff-field {
+  font-size: 12px;
+  color: var(--gray-600);
+  padding: 2px 0;
+}
+
+.diff-field-name {
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.diff-local {
+  color: var(--primary-color);
+  margin-right: 4px;
+}
+
+.diff-arrow {
+  color: var(--gray-400);
+  margin-right: 4px;
+}
+
+.diff-server {
+  color: var(--success-color);
+}
+
+.diff-side {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-top: 4px;
+}
+
+.conflict-options {
+  margin-top: 20px;
+}
+
+.conflict-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 12px;
+}
+
+.conflict-option {
+  display: block;
+  padding: 14px 16px;
+  border: 2px solid var(--gray-200);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.conflict-option:hover {
+  border-color: var(--gray-300);
+  background: var(--gray-50);
+}
+
+.conflict-option.selected {
+  border-color: var(--primary-color);
+  background: var(--primary-light);
+}
+
+.option-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.option-icon {
+  font-size: 18px;
+}
+
+.option-title {
+  font-weight: 600;
+  color: var(--gray-800);
+  font-size: 14px;
+}
+
+.option-desc {
+  font-size: 12px;
+  color: var(--gray-600);
+  padding-left: 28px;
+}
+
+.version-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.version-history-desc {
+  font-size: 13px;
+  color: var(--gray-600);
+  margin: 0;
+}
+
+.empty-history {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.empty-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+.history-list {
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.history-item {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--gray-100);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-item:hover {
+  background: var(--gray-50);
+}
+
+.history-item.selected {
+  background: var(--primary-light);
+  border-left: 3px solid var(--primary-color);
+  padding-left: 15px;
+}
+
+.history-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-version {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.version-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--primary-color);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.history-desc {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+}
+
+.history-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.history-diff {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--gray-200);
+}
+
+.diff-section {
+  margin-bottom: 12px;
+}
+
+.diff-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+
+.diff-none {
+  font-size: 12px;
+  color: var(--success-color);
+  font-weight: 500;
+}
+
+.diff-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.history-restore-btn {
+  margin-top: 8px;
+}
+
+.restore-confirm {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--danger-light);
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.restore-confirm span {
+  font-size: 12px;
+  color: var(--danger-color);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.restore-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-xl {
+  max-width: 720px;
+}
+
 @media (max-width: 900px) {
   .notification {
     top: 16px;
